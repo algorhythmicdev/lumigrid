@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "lumigrid_lednode",
-    "project_version":    "70c3f3b-dirty",
+    "project_version":    "6171582-dirty",
     "project_path":       "/home/slaff/Documents/lumigrid-1/firmware",
     "idf_path":           "/home/slaff/esp/esp-idf",
     "build_dir":          "/home/slaff/Documents/lumigrid-1/firmware/build",
@@ -1165,7 +1165,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "/home/slaff/Documents/lumigrid-1/firmware/build/esp-idf/led_effects/libled_effects.a",
-            "sources": [ "/home/slaff/Documents/lumigrid-1/firmware/components/led_effects/effects.c" ],
+            "sources": [ "/home/slaff/Documents/lumigrid-1/firmware/components/led_effects/effects.c", "/home/slaff/Documents/lumigrid-1/firmware/components/led_effects/fx_util.c", "/home/slaff/Documents/lumigrid-1/firmware/components/led_effects/fx_palette.c" ],
             "include_dirs": [ "include" ]
         },
         "log": {

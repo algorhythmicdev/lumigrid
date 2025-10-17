@@ -110,3 +110,7 @@
 2372	2497	1760704502215202507	/home/slaff/Documents/lumigrid-1/firmware/build/bootloader/.bin_timestamp	22363297307bbb32
 2497	2533	1760704502216202506	esp-idf/esptool_py/CMakeFiles/bootloader_check_size	d110862f58fd3359
 2497	2533	1760704502216202506	/home/slaff/Documents/lumigrid-1/firmware/build/bootloader/esp-idf/esptool_py/CMakeFiles/bootloader_check_size	d110862f58fd3359
+5	41	1760705295766440326	esp-idf/esptool_py/CMakeFiles/bootloader_check_size	d110862f58fd3359
+5	41	1760705295766440326	/home/slaff/Documents/lumigrid-1/firmware/build/bootloader/esp-idf/esptool_py/CMakeFiles/bootloader_check_size	d110862f58fd3359
+7	47	1760705307932429348	esp-idf/esptool_py/CMakeFiles/bootloader_check_size	d110862f58fd3359
+7	47	1760705307932429348	/home/slaff/Documents/lumigrid-1/firmware/build/bootloader/esp-idf/esptool_py/CMakeFiles/bootloader_check_size	d110862f58fd3359
