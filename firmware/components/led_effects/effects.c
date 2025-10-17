@@ -2,8 +2,6 @@
 #include <math.h>
 #include <string.h>
 
-static const float TAU = 6.28318530718f;
-
 // --- helpers ---
 static inline uint8_t clamp8(int v){ return (v<0)?0:((v>255)?255:v); }
 static inline float fracf(float x){ return x - floorf(x); }

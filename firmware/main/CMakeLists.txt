@@ -8,6 +8,7 @@ idf_component_register(
         "tasks/task_rest_server.c"
         "tasks/task_ui_fs.c"
         "tasks/task_mqtt_client.c"
+        "tasks/task_wifi.c"
         "utils/json_config.c"
         "utils/scheduler.c"
         "utils/trigger_engine.c"
@@ -23,6 +24,8 @@ idf_component_register(
         esp_http_server
         esp_timer
         esp_wifi
+        esp_netif
+        esp_event
         mqtt
         json
         led_effects
@@ -31,6 +34,8 @@ idf_component_register(
         rest_api
         ui_server
         storage_fs
+        aled_rmt
+        mqtt_wrapper
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra)
