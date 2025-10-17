@@ -1,0 +1,36 @@
+idf_component_register(
+    SRCS 
+        "app_main.c"
+        "lednode_init.c"
+        "tasks/task_effect_engine.c"
+        "tasks/task_pwm_driver.c"
+        "tasks/task_sync_manager.c"
+        "tasks/task_rest_server.c"
+        "tasks/task_ui_fs.c"
+        "tasks/task_mqtt_client.c"
+        "utils/json_config.c"
+        "utils/scheduler.c"
+        "utils/trigger_engine.c"
+        "utils/diagnostics.c"
+    INCLUDE_DIRS 
+        "."
+        "config"
+        "tasks"
+        "utils"
+    REQUIRES
+        driver
+        nvs_flash
+        esp_http_server
+        esp_timer
+        esp_wifi
+        mqtt
+        json
+        led_effects
+        pca9685_driver
+        sync_protocol
+        rest_api
+        ui_server
+        storage_fs
+)
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra)

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LumiGrid — LED Node UI</title>
+  <meta name="color-scheme" content="dark light" />
+  <style>
+    :root{
+      --bg: #0f1115;
+      --surface: #151924;
+      --muted: #1c2232;
+      --text: #e6eaf2;
+      --subtext:#9BA7C0;
+      --primary:#6C7CFF;
+      --primary-600:#5366ff;
+      --primary-700:#4256f3;
+      --accent:#86E2FF;
+      --danger:#ff5c7a;
+      --warn:#ffc857;
+      --success:#38e1b3;
+      --focus:#86E2FF;
+      --ring: 0 0 0 .16rem var(--focus), 0 0 0 .28rem color-mix(in oklab, var(--focus) 30%, transparent);
+      --radius: 14px;
+      --radius-sm: 10px;
+      --shadow-md: 0 10px 30px rgba(0,0,0,.35);
+      --shadow-sm: 0 2px 10px rgba(0,0,0,.25);
+      --gap: 14px;
+    }
+    [data-theme="light"]{
+      --bg:#f7f8fb; --surface:#ffffff; --muted:#eef1f7; --text:#0e1220; --subtext:#3b4866;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--text); font: 15px/1.5 system-ui, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    }
+    a{color:var(--accent); text-decoration:none}
+    a:focus-visible{outline:none; box-shadow:var(--ring); border-radius:8px}
+
+    .app{display:grid; grid-template-rows: 56px 1fr; height:100%}
+    .topbar{display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid #20263a; background:linear-gradient(180deg,var(--surface), color-mix(in oklab, var(--surface) 80%, transparent));}
+    .brand{display:flex; align-items:center; gap:10px; font-weight:700}
+    .brand svg{width:24px; height:24px}
+    .top-actions{margin-left:auto; display:flex; gap:10px; align-items:center}
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:var(--muted); color:var(--subtext)}
+    .status-dot{width:8px; height:8px; border-radius:50%; background:var(--success); box-shadow:0 0 10px var(--success)}
+
+    .main{display:grid; grid-template-columns: 220px 1fr; height:100%}
+    nav{border-right:1px solid #20263a; background:linear-gradient(180deg,var(--surface), color-mix(in oklab, var(--surface) 85%, transparent));}
+    .navlink{display:flex; align-items:center; gap:10px; padding:10px 14px; color:var(--subtext); border-left:3px solid transparent}
+    .navlink:hover{background:color-mix(in oklab, var(--muted) 80%, transparent); color:var(--text)}
+    .navlink[aria-current="page"]{color:var(--text); background:var(--muted); border-left-color:var(--primary)}
+    .content{padding:16px; overflow:auto}
+
+    .btn{display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:12px; background:var(--primary); color:white; border:none; cursor:pointer; box-shadow:var(--shadow-sm)}
+    .btn:focus-visible{outline:none; box-shadow:var(--ring)}
+    .btn.ghost{background:transparent; border:1px solid #2a3248; color:var(--text)}
+    .btn.danger{background:var(--danger)}
+    .btn.small{padding:6px 10px; border-radius:10px}
+    
+    .card{background:var(--surface); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow-sm)}
+    .grid{display:grid; gap:var(--gap); grid-template-columns:repeat(auto-fit, minmax(280px,1fr))}
+    h1,h2,h3{margin:0 0 12px}
+    .badge{display:inline-block; padding:4px 8px; border-radius:6px; font-size:12px; font-weight:600}
+    .badge.success{background:var(--success); color:#000}
+    .badge.warn{background:var(--warn); color:#000}
+    .badge.danger{background:var(--danger); color:#fff}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        LumiGrid
+      </div>
+      <div class="top-actions">
+        <span class="pill"><span class="status-dot"></span> Connected</span>
+      </div>
+    </header>
+    <div class="main">
+      <nav>
+        <a href="#" class="navlink" aria-current="page">Dashboard</a>
+        <a href="#" class="navlink">Channels</a>
+        <a href="#" class="navlink">Presets</a>
+        <a href="#" class="navlink">Schedules</a>
+        <a href="#" class="navlink">Settings</a>
+      </nav>
+      <main class="content">
+        <h1>Dashboard</h1>
+        <div class="grid">
+          <div class="card">
+            <h3>Status</h3>
+            <p><span class="badge success">Online</span></p>
+            <p>Node: led-node-1</p>
+            <p>Uptime: 2h 34m</p>
+          </div>
+          <div class="card">
+            <h3>Addressable Channels</h3>
+            <p>8 channels active</p>
+            <p>FPS: 60</p>
+          </div>
+          <div class="card">
+            <h3>PWM Channels</h3>
+            <p>8 channels ready</p>
+            <p>Frequency: 1000 Hz</p>
+          </div>
+          <div class="card">
+            <h3>Quick Actions</h3>
+            <button class="btn small">All Off</button>
+            <button class="btn small ghost">Test Pattern</button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <script>
+    console.log('LumiGrid UI loaded');
+    
+    const evtSource = new EventSource('/events');
+    evtSource.onmessage = (e) => {
+      console.log('Event:', e.data);
+    };
+  </script>
+</body>
+</html>
