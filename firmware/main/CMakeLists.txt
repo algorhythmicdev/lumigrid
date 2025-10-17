@@ -9,10 +9,7 @@ set(COMPONENT_INCLUDE_DIRS
     "."
     "config")
 
-set(component_requires pca9685_driver)
-if(CONFIG_LUMIGRID_ENABLE_INTERNAL_TESTS)
-    list(APPEND component_requires unity)
-endif()
+set(component_requires pca9685_driver led_effects unity)
 
 idf_component_register(SRCS ${COMPONENT_SRCS}
                       INCLUDE_DIRS ${COMPONENT_INCLUDE_DIRS}

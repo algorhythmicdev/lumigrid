@@ -1,5 +1,8 @@
 #include "esp_log.h"
 #include "esp_err.h"
+#include "unity.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "config/board_pinmap.h"
 #include "pca9685_driver.h"
@@ -27,5 +30,10 @@ void app_main(void) {
     pca9685_all_off();
   }
 
-  // TODO: initialize remaining subsystems once implementations land.
+  ESP_LOGI(TAG, "Running unit tests...");
+  vTaskDelay(pdMS_TO_TICKS(2000));
+  unity_run_tests_by_tag("[pca9685]", false);
+
+  ESP_LOGI(TAG, "Tests finished. Halting.");
+  vTaskDelay(portMAX_DELAY);
 }
