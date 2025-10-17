@@ -1,0 +1,88 @@
+openapi: 3.1.0
+info:
+  title: LumiGrid LED Node API
+  version: "1.0.0"
+servers:
+  - url: http://{host}
+paths:
+  /api/status:
+    get:
+      summary: Get node status
+      responses:
+        "200":
+          description: OK
+  /api/config:
+    get:
+      summary: Read configuration
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Update configuration (partial allowed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Saved
+  /api/presets:
+    get:
+      summary: List presets
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Create or update a preset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Saved
+  /api/presets/{name}:
+    delete:
+      summary: Delete preset
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Deleted
+  /api/trigger:
+    post:
+      summary: One-shot action or bounded override
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Executed
+  /api/cue:
+    post:
+      summary: Apply a cue now or at absolute time
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: OK
+  /events:
+    get:
+      summary: Server-sent events (playhead, telemetry)
+      responses:
+        "200":
+          description: Event stream
