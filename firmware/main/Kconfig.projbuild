@@ -1,8 +1,0 @@
-menu "LumiGrid Firmware Options"
-    config LUMIGRID_ENABLE_INTERNAL_TESTS
-        bool "Enable LumiGrid internal unit tests"
-        default n
-        help
-            Compile in Unity-based internal tests for LumiGrid firmware modules.
-            Enable when running `idf.py test` to exercise drivers without hardware.
-endmenu
