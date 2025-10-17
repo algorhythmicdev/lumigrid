@@ -7,25 +7,25 @@
 #include "web_server.h"
 #include "led_driver.h"
 #include "protocol.h"
+#include "mapper.h"
 
 static const char *TAG = "MAIN";
 
-void app_main(void)
-{
-    // Initialize NVS for configuration storage
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-    
-    // Initialize all subsystems
+void app_main(void) {
+    ESP_LOGI(TAG, "Starting LumiGrid ESP32 Controller");
+
+    ESP_ERROR_CHECK(nvs_flash_init());
     config_init();
+    mapper_init();
     wifi_init();
     led_driver_init();
     protocol_init();
     web_server_init();
-    
-    ESP_LOGI(TAG, "LumiGrid ESP32 Controller initialized");
+
+    xTaskCreate(wifi_task, "wifi_task", 4096, NULL, 5, NULL);
+    xTaskCreate(web_server_task, "web_server_task", 4096, NULL, 5, NULL);
+    xTaskCreate(led_render_task, "led_render_task", 4096, NULL, 5, NULL);
+    xTaskCreate(protocol_task, "protocol_task", 4096, NULL, 5, NULL);
+
+    ESP_LOGI(TAG, "All tasks started");
 }

@@ -1,5 +1,5 @@
 idf_component_register(
-    SRCS 
+    SRCS
         "app_main.c"
         "config.c"
         "wifi.c"
@@ -8,7 +8,7 @@ idf_component_register(
         "protocol.c"
         "mapper.c"
     INCLUDE_DIRS "."
-    REQUIRES 
+    REQUIRES
         esp_wifi
         esp_http_server
         nvs_flash

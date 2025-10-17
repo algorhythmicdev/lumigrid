@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LumiGrid ESP32 Controller</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; }
+    label { display: block; margin-top: 1em; }
+    input[type="text"], input[type="number"] { width: 200px; }
+    button { margin-top: 1em; }
+    #status { margin-top: 2em; color: #555; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h1>LumiGrid ESP32 Controller</h1>
+  <div id="info">
+    <b>Device Info:</b>
+    <pre id="info-json">Loading...</pre>
+  </div>
+  <hr>
+  <form id="config-form">
+    <b>Configuration</b>
+    <label>LED Count: <input type="number" name="led_count" min="1"></label>
+    <label>LED Pin: <input type="number" name="led_pin" min="0"></label>
+    <label>RGBW: <input type="checkbox" name="led_is_rgbw"></label>
+    <label>UDP Port: <input type="number" name="udp_port" min="1"></label>
+    <label>FPS Limit: <input type="number" name="fps_limit" min="1"></label>
+    <label>WiFi SSID: <input type="text" name="wifi_ssid"></label>
+    <label>AP Mode: <input type="checkbox" name="ap_mode"></label>
+    <button type="submit">Save Config</button>
+    <span id="save-status"></span>
+  </form>
+  <button id="preview-btn">Preview LEDs</button>
+  <div id="status"></div>
+  <script>
+    async function fetchInfo() {
+      const r = await fetch('/api/info');
+      const j = await r.json();
+      document.getElementById('info-json').textContent = JSON.stringify(j, null, 2);
+      document.getElementById('status').textContent = "Device IP: " + (j.ip || "unknown");
+    }
+    async function fetchConfig() {
+      const r = await fetch('/api/config');
+      const j = await r.json();
+      for (const k in j) {
+        const el = document.querySelector(`[name="${k}"]`);
+        if (!el) continue;
+        if (el.type === "checkbox") el.checked = !!j[k];
+        else el.value = j[k];
+      }
+    }
+    document.getElementById('config-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const obj = {};
+      for (const [k, v] of fd.entries()) {
+        if (document.querySelector(`[name="${k}"]`).type === "checkbox")
+          obj[k] = document.querySelector(`[name="${k}"]`).checked;
+        else
+          obj[k] = isNaN(v) ? v : Number(v);
+      }
+      const resp = await fetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(obj)
+      });
+      document.getElementById('save-status').textContent = resp.ok ? "Saved!" : "Error";
+      document.getElementById('save-status').className = resp.ok ? "success" : "error";
+      setTimeout(() => document.getElementById('save-status').textContent = '', 2000);
+      fetchConfig();
+    };
+    document.getElementById('preview-btn').onclick = async () => {
+      await fetch('/api/preview');
+      document.getElementById('status').textContent = "Preview sent!";
+      setTimeout(fetchInfo, 1000);
+    };
+    fetchInfo();
+    fetchConfig();
+  </script>
+</body>
+</html>

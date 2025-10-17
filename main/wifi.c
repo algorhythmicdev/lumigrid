@@ -82,25 +82,54 @@ esp_err_t wifi_init(void) {
 }
 
 esp_err_t wifi_start_ap(void) {
+    lumigrid_config_t config;
+    if (config_load(&config) != ESP_OK) {
+        ESP_LOGW(TAG, "Falling back to default AP credentials");
+        strcpy(config.wifi_ssid, "LumiGridSetup");
+        strcpy(config.wifi_pass, "lumigrid123");
+    }
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = "LumiGridSetup",
-            .ssid_len = strlen("LumiGridSetup"),
+            .ssid = "",
+            .ssid_len = 0,
             .channel = 1,
-            .password = "lumigrid123",
+            .password = "",
             .max_connection = 4,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
+    strncpy((char*)wifi_config.ap.ssid, config.wifi_ssid, sizeof(wifi_config.ap.ssid));
+    wifi_config.ap.ssid_len = strlen((char*)wifi_config.ap.ssid);
+    strncpy((char*)wifi_config.ap.password, config.wifi_pass, sizeof(wifi_config.ap.password));
+    if (strlen((char*)wifi_config.ap.password) == 0) {
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    }
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             "LumiGridSetup", "lumigrid123", 1);
+             wifi_config.ap.ssid, wifi_config.ap.password, wifi_config.ap.channel);
 
     strcpy(ip_addr_str, "192.168.4.1"); // Default AP IP
     return ESP_OK;
+}
+
+// Add function to switch WiFi mode at runtime (for web UI config changes)
+esp_err_t wifi_set_mode(bool ap_mode) {
+    if (ap_mode) {
+        ESP_LOGI(TAG, "Switching to AP mode");
+        ESP_ERROR_CHECK(esp_wifi_stop());
+        return wifi_start_ap();
+    } else {
+        lumigrid_config_t config;
+        if (config_load(&config) == ESP_OK) {
+            ESP_LOGI(TAG, "Switching to STA mode");
+            ESP_ERROR_CHECK(esp_wifi_stop());
+            return wifi_connect_sta(config.wifi_ssid, config.wifi_pass);
+        }
+        return ESP_FAIL;
+    }
 }
 
 esp_err_t wifi_connect_sta(const char *ssid, const char *password) {

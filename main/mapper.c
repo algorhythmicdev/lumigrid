@@ -1,33 +1,7 @@
 #include "mapper.h"
-#include "config.h"
 #include <esp_log.h>
-#include <nvs.h>
 
-static const char *TAG = "MAPPER";
-static mapper_type_t current_mapper = MAPPER_LINEAR;
-static uint16_t led_count = 0;
-
-esp_err_t mapper_init(void) {
-    lumigrid_config_t config;
-    if (config_load(&config) == ESP_OK) {
-        led_count = config.led_count;
-    }
-    
-    // Load mapper type from NVS
-    nvs_handle_t nvs_handle;
-    esp_err_t err = nvs_open("lumigrid", NVS_READONLY, &nvs_handle);
-    if (err == ESP_OK) {
-        uint8_t mapper_type = 0;
-        err = nvs_get_u8(nvs_handle, "mapper_type", &mapper_type);
-        if (err == ESP_OK) {
-            current_mapper = (mapper_type_t)mapper_type;
-        }
-        nvs_close(nvs_handle);
-    }
-    
-    ESP_LOGI(TAG, "Mapper initialized with type: %d", current_mapper);
-    return ESP_OK;
-}
+esp_err_t mapper_init(void) { return ESP_OK; }
 
 esp_err_t mapper_set_type(mapper_type_t type) {
     current_mapper = type;
