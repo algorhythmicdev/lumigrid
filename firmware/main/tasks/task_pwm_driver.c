@@ -1,3 +1,4 @@
+#include "task_pwm_driver.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -10,7 +11,8 @@ static const char *TAG = "PWM_DRIVER";
 typedef enum {
     PWM_MODE_STATIC,
     PWM_MODE_BREATH,
-    PWM_MODE_CANDLE
+    PWM_MODE_CANDLE,
+    PWM_MODE_WARMDIM
 } pwm_mode_t;
 
 typedef struct {
@@ -43,15 +45,25 @@ void pwm_set_mode_breath(uint8_t ch, float min_val, float max_val, float period_
     s_anims[ch].mode = PWM_MODE_BREATH;
     s_anims[ch].breath_min = min_val;
     s_anims[ch].breath_max = max_val;
-    s_anims[ch].breath_period_ms = period_ms;
+    s_anims[ch].breath_period_ms = period_ms > 0 ? period_ms : 2000.f;
 }
 
 void pwm_set_mode_candle(uint8_t ch, float base, float flicker, uint32_t seed) {
     if (ch >= 8) return;
-    s_anims[ch].mode = PWM_MODE_CANDLE;
-    s_anims[ch].candle_base = base;
-    s_anims[ch].candle_flick = flicker;
-    s_anims[ch].seed = seed;
+   s_anims[ch].mode = PWM_MODE_CANDLE;
+   s_anims[ch].candle_base = base;
+   s_anims[ch].candle_flick = flicker;
+   s_anims[ch].seed = seed;
+}
+
+void pwm_set_mode_warmdim(uint8_t ch, float duty) {
+    if (ch >= 8) return;
+    s_anims[ch].mode = PWM_MODE_WARMDIM;
+    s_anims[ch].target = duty;
+    float clamped = duty;
+    if (clamped < 0.f) clamped = 0.f;
+    if (clamped > 1.f) clamped = 1.f;
+    pca9685_set_duty(ch, powf(clamped, 2.0f));
 }
 
 static void pwm_update_channel(pwm_anim_t* anim, uint32_t t_ms) {
@@ -59,12 +71,13 @@ static void pwm_update_channel(pwm_anim_t* anim, uint32_t t_ms) {
     
     switch (anim->mode) {
         case PWM_MODE_BREATH: {
-            float phase = fmodf(t_ms / anim->breath_period_ms, 1.0f);
-            float s = 0.5f - 0.5f * cosf(phase * 6.283f);
+            float period = anim->breath_period_ms > 10.f ? anim->breath_period_ms : 1000.f;
+            float phase = fmodf((float)t_ms / period, 1.0f);
+            float s = 0.5f - 0.5f * cosf(phase * 6.2831853f);
             duty = anim->breath_min + (anim->breath_max - anim->breath_min) * s;
             break;
         }
-        
+
         case PWM_MODE_CANDLE: {
             uint32_t x = (t_ms * 1664525u + anim->seed * 1013904223u);
             float n = ((x >> 8) & 0xFFFF) / 65535.0f;
@@ -73,7 +86,15 @@ static void pwm_update_channel(pwm_anim_t* anim, uint32_t t_ms) {
             if (duty > 1) duty = 1;
             break;
         }
-        
+
+        case PWM_MODE_WARMDIM: {
+            float clamped = anim->target;
+            if (clamped < 0.f) clamped = 0.f;
+            if (clamped > 1.f) clamped = 1.f;
+            duty = powf(clamped, 2.0f);
+            break;
+        }
+
         case PWM_MODE_STATIC:
         default:
             duty = anim->target;

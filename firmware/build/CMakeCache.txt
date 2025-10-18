@@ -200,6 +200,9 @@ CMAKE_MODULE_LINKER_FLAGS_RELEASE:STRING=
 // RELWITHDEBINFO builds.
 CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO:STRING=
 
+//Force response files for large link commands
+CMAKE_NINJA_FORCE_RESPONSE_FILE:BOOL=ON
+
 //Path to a program.
 CMAKE_NM:FILEPATH=/home/slaff/.espressif/tools/xtensa-esp-elf/esp-13.2.0_20240530/xtensa-esp-elf/bin/xtensa-esp32-elf-nm
 

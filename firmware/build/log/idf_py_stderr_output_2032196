@@ -1,0 +1,22 @@
+info: INFO: Symbol IDF_TARGET_LINUX defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
+    /home/slaff/esp/esp-idf/Kconfig:78
+    /home/slaff/esp/esp-idf/Kconfig:162
+CMake Deprecation Warning at /home/slaff/esp/esp-idf/components/mbedtls/mbedtls/CMakeLists.txt:21 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Error at /home/slaff/esp/esp-idf/tools/cmake/component.cmake:314 (message):
+  Include directory
+  '/home/slaff/Documents/lumigrid-1/firmware/main/utils/power_budget' is not
+  a directory.
+Call Stack (most recent call first):
+  /home/slaff/esp/esp-idf/tools/cmake/component.cmake:482 (__component_add_include_dirs)
+  main/CMakeLists.txt:1 (idf_component_register)
+
+
+ninja: error: rebuilding 'build.ninja': subcommand failed

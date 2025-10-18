@@ -1,187 +1,152 @@
 #include "aled_rmt.h"
+
 #include "driver/rmt_tx.h"
 #include "esp_log.h"
-#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#define ALED_RMT_MAX_CHANNELS 8
+#define SYMBOL_CHUNK          512
 
 static const char *TAG = "ALED_RMT";
 
-#define WS2812_T0H_NS 400
-#define WS2812_T0L_NS 850
-#define WS2812_T1H_NS 800
-#define WS2812_T1L_NS 450
-#define WS2812_RESET_US 50
+static rmt_channel_handle_t s_channels[ALED_RMT_MAX_CHANNELS];
+static gpio_num_t           s_channel_gpio[ALED_RMT_MAX_CHANNELS];
 
 typedef struct {
-    rmt_channel_handle_t rmt_ch;
-    rmt_encoder_handle_t encoder;
-    gpio_num_t gpio;
-    led_type_t type;
-    uint16_t num_leds;
-} aled_rmt_ctx_t;
+  uint16_t t1h, t1l, t0h, t0l;
+} ws_timing_t;
 
-static size_t rmt_encode_led_strip(rmt_encoder_t *encoder, rmt_channel_handle_t channel,
-                                    const void *primary_data, size_t data_size, rmt_encode_state_t *ret_state) {
-    return 0;
+static inline ws_timing_t ws2812_t(void){
+  // 100 ns ticks at 10 MHz (IDF default)
+  return (ws_timing_t){ .t1h = 8, .t1l = 4, .t0h = 4, .t0l = 9 };
 }
 
-static esp_err_t rmt_del_led_strip_encoder(rmt_encoder_t *encoder) {
-    if (encoder) {
-        free(encoder);
-    }
+static inline rmt_symbol_word_t sym(uint16_t high, uint16_t low){
+  return (rmt_symbol_word_t){
+    .duration0 = high,
+    .level0    = 1,
+    .duration1 = low,
+    .level1    = 0
+  };
+}
+
+esp_err_t aled_rmt_init_chan(int idx, gpio_num_t pin){
+  if (idx < 0 || idx >= ALED_RMT_MAX_CHANNELS){
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  if (s_channels[idx]){
+    ESP_LOGW(TAG, "Channel %d already initialised on GPIO %d", idx, s_channel_gpio[idx]);
     return ESP_OK;
+  }
+
+  rmt_tx_channel_config_t cfg = {
+    .gpio_num = pin,
+    .clk_src = RMT_CLK_SRC_DEFAULT,
+    .resolution_hz = 10 * 1000 * 1000, // 10 MHz -> 100 ns ticks
+    .mem_block_symbols = 96,
+    .trans_queue_depth = 4
+  };
+
+  esp_err_t err = rmt_new_tx_channel(&cfg, &s_channels[idx]);
+  if (err != ESP_OK){
+    ESP_LOGE(TAG, "rmt_new_tx_channel failed: %s", esp_err_to_name(err));
+    return err;
+  }
+
+  err = rmt_enable(s_channels[idx]);
+  if (err != ESP_OK){
+    ESP_LOGE(TAG, "rmt_enable failed: %s", esp_err_to_name(err));
+    rmt_del_channel(s_channels[idx]);
+    s_channels[idx] = NULL;
+    return err;
+  }
+
+  s_channel_gpio[idx] = pin;
+  ESP_LOGI(TAG, "RMT channel %d initialised on GPIO %d", idx, pin);
+  return ESP_OK;
 }
 
-static esp_err_t rmt_reset_led_strip_encoder(rmt_encoder_t *encoder) {
-    return ESP_OK;
+static inline uint8_t component_from_pixel(const px_rgba_t* fb, int pixel_idx, int component_idx, int stride){
+  const px_rgba_t* px = &fb[pixel_idx];
+  if (stride == 4){
+    switch (component_idx){
+      case 0: return px->g;
+      case 1: return px->r;
+      case 2: return px->b;
+      default: return px->w;
+    }
+  } else {
+    switch (component_idx){
+      case 0: return px->g;
+      case 1: return px->r;
+      default: return px->b;
+    }
+  }
 }
 
-esp_err_t aled_rmt_init_channel(aled_rmt_handle_t *handle, gpio_num_t pin, uint16_t num_leds, led_type_t type) {
-    if (!handle) {
-        return ESP_ERR_INVALID_ARG;
+esp_err_t aled_rmt_write(int idx, const px_rgba_t* fb, int npx, led_type_t type){
+  if (idx < 0 || idx >= ALED_RMT_MAX_CHANNELS || !s_channels[idx] || !fb || npx <= 0){
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  const ws_timing_t T = ws2812_t();
+  const int stride = (type == LED_SK6812_RGBW) ? 4 : 3;
+  const int total_bits = npx * stride * 8;
+
+  static rmt_symbol_word_t symbols[SYMBOL_CHUNK];
+  rmt_transmit_config_t tc = {
+    .loop_count = 0
+  };
+
+  int bit_index = 0;
+  while (bit_index < total_bits){
+    int take = total_bits - bit_index;
+    if (take > SYMBOL_CHUNK){
+      take = SYMBOL_CHUNK;
     }
-    
-    aled_rmt_ctx_t *ctx = calloc(1, sizeof(aled_rmt_ctx_t));
-    if (!ctx) {
-        return ESP_ERR_NO_MEM;
+
+    for (int k = 0; k < take; ++k){
+      int global_bit = bit_index + k;
+      int pixel = global_bit / (stride * 8);
+      int within_pixel = global_bit % (stride * 8);
+      int component = within_pixel / 8;
+      int bit_pos = 7 - (within_pixel % 8);
+
+      uint8_t value = 0;
+      if (pixel < npx){
+        value = component_from_pixel(fb, pixel, component, stride);
+      }
+
+      if (value & (1 << bit_pos)){
+        symbols[k] = sym(T.t1h, T.t1l);
+      } else {
+        symbols[k] = sym(T.t0h, T.t0l);
+      }
     }
-    
-    ctx->gpio = pin;
-    ctx->type = type;
-    ctx->num_leds = num_leds;
-    
-    rmt_tx_channel_config_t tx_config = {
-        .gpio_num = pin,
-        .clk_src = RMT_CLK_SRC_DEFAULT,
-        .resolution_hz = 10 * 1000 * 1000,
-        .mem_block_symbols = 64,
-        .trans_queue_depth = 4,
-    };
-    
-    esp_err_t ret = rmt_new_tx_channel(&tx_config, &ctx->rmt_ch);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create RMT TX channel: %s", esp_err_to_name(ret));
-        free(ctx);
-        return ret;
+
+    esp_err_t err = rmt_transmit(s_channels[idx], NULL, symbols, take * sizeof(rmt_symbol_word_t), &tc);
+    if (err != ESP_OK){
+      ESP_LOGE(TAG, "rmt_transmit failed ch%d: %s", idx, esp_err_to_name(err));
+      return err;
     }
-    
-    rmt_bytes_encoder_config_t bytes_encoder_config = {
-        .bit0 = {
-            .level0 = 1,
-            .duration0 = WS2812_T0H_NS / 100,
-            .level1 = 0,
-            .duration1 = WS2812_T0L_NS / 100,
-        },
-        .bit1 = {
-            .level0 = 1,
-            .duration0 = WS2812_T1H_NS / 100,
-            .level1 = 0,
-            .duration1 = WS2812_T1L_NS / 100,
-        },
-        .flags.msb_first = 1,
-    };
-    
-    ret = rmt_new_bytes_encoder(&bytes_encoder_config, &ctx->encoder);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to create RMT encoder: %s", esp_err_to_name(ret));
-        rmt_del_channel(ctx->rmt_ch);
-        free(ctx);
-        return ret;
-    }
-    
-    ret = rmt_enable(ctx->rmt_ch);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to enable RMT channel: %s", esp_err_to_name(ret));
-        rmt_del_encoder(ctx->encoder);
-        rmt_del_channel(ctx->rmt_ch);
-        free(ctx);
-        return ret;
-    }
-    
-    handle->rmt_channel = ctx;
-    handle->gpio = pin;
-    handle->num_leds = num_leds;
-    handle->type = type;
-    
-    ESP_LOGI(TAG, "RMT channel initialized: GPIO%d, %d LEDs, type=%d", pin, num_leds, type);
-    return ESP_OK;
+
+    bit_index += take;
+  }
+
+  // Reset pulse (60 us); 1 ms delay is safe.
+  vTaskDelay(pdMS_TO_TICKS(1));
+  return ESP_OK;
 }
 
-esp_err_t aled_rmt_write_pixels(aled_rmt_handle_t *handle, const px_rgba_t *pixels, uint16_t count) {
-    if (!handle || !handle->rmt_channel || !pixels) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    aled_rmt_ctx_t *ctx = (aled_rmt_ctx_t *)handle->rmt_channel;
-    
-    size_t bytes_per_led = (ctx->type == LED_SK6812_RGBW) ? 4 : 3;
-    size_t buffer_size = count * bytes_per_led;
-    uint8_t *led_buffer = malloc(buffer_size);
-    if (!led_buffer) {
-        return ESP_ERR_NO_MEM;
-    }
-    
-    for (int i = 0; i < count; i++) {
-        if (ctx->type == LED_SK6812_RGBW) {
-            led_buffer[i * 4 + 0] = pixels[i].g;
-            led_buffer[i * 4 + 1] = pixels[i].r;
-            led_buffer[i * 4 + 2] = pixels[i].b;
-            led_buffer[i * 4 + 3] = pixels[i].w;
-        } else {
-            led_buffer[i * 3 + 0] = pixels[i].g;
-            led_buffer[i * 3 + 1] = pixels[i].r;
-            led_buffer[i * 3 + 2] = pixels[i].b;
-        }
-    }
-    
-    rmt_transmit_config_t tx_conf = {
-        .loop_count = 0,
-    };
-    
-    esp_err_t ret = rmt_transmit(ctx->rmt_ch, ctx->encoder, led_buffer, buffer_size, &tx_conf);
-    
-    free(led_buffer);
-    
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "RMT transmit failed: %s", esp_err_to_name(ret));
-    }
-    
-    return ret;
-}
-
-esp_err_t aled_rmt_clear(aled_rmt_handle_t *handle) {
-    if (!handle || !handle->rmt_channel) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    aled_rmt_ctx_t *ctx = (aled_rmt_ctx_t *)handle->rmt_channel;
-    
-    px_rgba_t *black = calloc(ctx->num_leds, sizeof(px_rgba_t));
-    if (!black) {
-        return ESP_ERR_NO_MEM;
-    }
-    
-    esp_err_t ret = aled_rmt_write_pixels(handle, black, ctx->num_leds);
-    free(black);
-    
-    return ret;
-}
-
-esp_err_t aled_rmt_deinit(aled_rmt_handle_t *handle) {
-    if (!handle || !handle->rmt_channel) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    aled_rmt_ctx_t *ctx = (aled_rmt_ctx_t *)handle->rmt_channel;
-    
-    aled_rmt_clear(handle);
-    
-    rmt_disable(ctx->rmt_ch);
-    rmt_del_encoder(ctx->encoder);
-    rmt_del_channel(ctx->rmt_ch);
-    
-    free(ctx);
-    handle->rmt_channel = NULL;
-    
-    ESP_LOGI(TAG, "RMT channel deinitialized");
-    return ESP_OK;
+void aled_rmt_deinit(int idx){
+  if (idx < 0 || idx >= ALED_RMT_MAX_CHANNELS){
+    return;
+  }
+  if (s_channels[idx]){
+    rmt_disable(s_channels[idx]);
+    rmt_del_channel(s_channels[idx]);
+    s_channels[idx] = NULL;
+  }
 }

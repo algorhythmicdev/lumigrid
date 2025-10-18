@@ -1,15 +1,69 @@
 #include "lednode_init.h"
 #include "board_pinmap.h"
 #include "pca9685_driver.h"
-#include "effects.h"
 #include "storage_fs.h"
 #include "task_wifi.h"
 #include "rest_api.h"
 #include "ui_server.h"
 #include "sync_protocol.h"
 #include "mqtt_wrapper.h"
+#include "task_effect_engine.h"
+#include "task_pwm_driver.h"
+#include "trigger_engine.h"
 #include "esp_log.h"
 #include "driver/gpio.h"
+
+#include <stddef.h>
+
+static bool rest_bridge_set_base(int ch, const effect_params_t *params, uint32_t fade_ms){
+    return effect_engine_set_base(ch, params, fade_ms);
+}
+
+static bool rest_bridge_set_overlay(int ch, const effect_params_t *params){
+    return effect_engine_set_overlay(ch, params);
+}
+
+static void rest_bridge_clear_overlay(int ch){
+    effect_engine_clear_overlay(ch);
+}
+
+static void rest_bridge_get_power_scale(float *out, size_t len){
+    if (!out || len == 0){
+        return;
+    }
+    effect_engine_stats_t stats;
+    effect_engine_get_stats(&stats);
+    size_t count = len < EFFECT_ENGINE_CH_MAX ? len : EFFECT_ENGINE_CH_MAX;
+    for (size_t i = 0; i < count; ++i){
+        out[i] = stats.power_scale[i];
+    }
+    for (size_t i = count; i < len; ++i){
+        out[i] = 1.0f;
+    }
+}
+
+static const rest_api_effect_ops_t REST_EFFECT_OPS = {
+    .set_base = rest_bridge_set_base,
+    .set_overlay = rest_bridge_set_overlay,
+    .clear_overlay = rest_bridge_clear_overlay,
+    .get_power_scale = rest_bridge_get_power_scale
+};
+
+static const rest_api_pwm_ops_t REST_PWM_OPS = {
+    .mode_static = pwm_set_mode_static,
+    .mode_breath = pwm_set_mode_breath,
+    .mode_candle = pwm_set_mode_candle,
+    .mode_warmdim = pwm_set_mode_warmdim
+};
+
+static void rest_bridge_set_beat(float phase){
+    trigger_set_beat(phase);
+}
+
+static const rest_api_trigger_ops_t REST_TRIGGER_OPS = {
+    .set_beat = rest_bridge_set_beat,
+    .strobe = trigger_strobe
+};
 
 static const char *TAG = "INIT";
 
@@ -37,7 +91,11 @@ void lednode_init(void) {
     ESP_ERROR_CHECK(pca9685_init(&pca_cfg));
     
     ESP_LOGI(TAG, "[4/8] LED effects engine");
-    fx_init_all();
+    task_effect_engine_start();
+    task_pwm_driver_start();
+    rest_api_register_effect_ops(&REST_EFFECT_OPS);
+    rest_api_register_pwm_ops(&REST_PWM_OPS);
+    rest_api_register_trigger_ops(&REST_TRIGGER_OPS);
     
     for (int ch = 0; ch < 8; ch++) {
         pca9685_set_duty(ch, 0.0f);

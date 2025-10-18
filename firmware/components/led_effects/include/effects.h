@@ -6,12 +6,12 @@ typedef struct { uint8_t r,g,b,w; } px_rgba_t;
 
 typedef enum { LED_WS2812B, LED_SK6812_RGBW } led_type_t;
 
-typedef enum { 
-  BLEND_NORMAL, 
-  BLEND_ADD, 
-  BLEND_SCREEN, 
-  BLEND_MULTIPLY, 
-  BLEND_LIGHTEN 
+typedef enum {
+  BLEND_NORMAL,
+  BLEND_ADD,
+  BLEND_SCREEN,
+  BLEND_MULTIPLY,
+  BLEND_LIGHTEN
 } blend_mode_t;
 
 typedef struct {
@@ -25,15 +25,15 @@ typedef struct {
 
 typedef struct {
   uint32_t effect_id;
-  float speed;            // generic speed 0..n (px/s, cycles/s)
-  float intensity;        // 0..1 scalar
-  uint32_t palette_id;    // index into palette registry
+  float    speed;          // cycles/s or px/s (effect-defined)
+  float    intensity;      // 0..1 scalar
+  uint32_t palette_id;     // 0..N (into fx_palette registry)
   px_rgba_t color1, color2, color3;
-  uint32_t seed;          // per-instance randomization
-  blend_mode_t blend;     // blend mode for overlays
-  uint8_t opacity;        // 0..255 (for overlays)
-  uint16_t seg_start;     // virtual segment start pixel
-  uint16_t seg_len;       // virtual segment length (0=full channel)
+  uint32_t seed;           // stable per-instance
+  blend_mode_t blend;      // overlay blending
+  uint8_t  opacity;        // 0..255 overlay opacity
+  uint16_t seg_start;      // virtual segment start within channel
+  uint16_t seg_len;        // 0 = full length
 } effect_params_t;
 
 typedef uint32_t (*fx_render_fn)(aled_channel_t *ch, const effect_params_t *p,

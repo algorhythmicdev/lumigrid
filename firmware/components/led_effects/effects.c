@@ -10,8 +10,7 @@ static inline uint8_t clamp8(int v){ return (v<0)?0:((v>255)?255:v); }
 static inline float fracf(float x){ return x - floorf(x); }
 static inline uint8_t lerp8(uint8_t a, uint8_t b, float t){ return (uint8_t)(a + (b-a)*t); }
 
-// Beat sync global (updated via trigger API)
-static volatile float g_beat = 0.0f;
+extern volatile float g_beat_phase;
 
 // --- Basic Effects (Original) ---
 static bool fx_solid_init(aled_channel_t *ch, const effect_params_t *p){ (void)ch;(void)p; return true; }
@@ -115,10 +114,11 @@ static uint32_t fx_noise(aled_channel_t *ch, const effect_params_t *p, uint32_t 
   segment_t s = seg_from_params(ch,p);
   float spd = p->speed>0?p->speed:1.2f;
   float t = (t_ms/1000.0f)*spd + p->seed*0.1f;
+  float inten = (p->intensity>0.f)?p->intensity:1.f;
   uint32_t ma=0;
   for(int i=0;i<s.len;i++){
     float n = noise1(i*0.08f + t);
-    float v = powf(n, 1.5f) * p->intensity;
+    float v = powf(n, 1.5f) * inten;
     px_rgba_t px = { (uint8_t)(p->color1.r*v), (uint8_t)(p->color1.g*v), (uint8_t)(p->color1.b*v), 0};
     ch->framebuf[s.start+i] = px;
     ma += px.r + px.g + px.b;
@@ -130,11 +130,12 @@ static uint32_t fx_noise(aled_channel_t *ch, const effect_params_t *p, uint32_t 
 static uint32_t fx_fire(aled_channel_t *ch, const effect_params_t *p, uint32_t t_ms, uint32_t t_end_ms){
   (void)t_end_ms;
   segment_t s = seg_from_params(ch,p);
+  float inten = (p->intensity>0.f)?p->intensity:1.f;
   uint32_t ma=0;
   for(int i=0;i<s.len;i++){
     float y = (float)i/s.len;
     float flick = noise1((i*0.15f) + (t_ms*0.006f) + p->seed)*0.7f + 0.3f;
-    float heat = powf(1.0f - y, 2.0f) * flick * p->intensity;
+    float heat = powf(1.0f - y, 2.0f) * flick * inten;
     px_rgba_t px = hsv_to_rgbw(0.08f + 0.05f*(1.0f-heat), 1.0f, heat, (ch->type==LED_SK6812_RGBW));
     ch->framebuf[s.start+i] = px;
     ma += px.r+px.g+px.b+px.w;
@@ -147,10 +148,11 @@ static uint32_t fx_waves(aled_channel_t *ch, const effect_params_t *p, uint32_t 
   (void)t_end_ms;
   segment_t s = seg_from_params(ch,p);
   float t = t_ms/1000.0f;
+  float inten = (p->intensity>0.f)?p->intensity:1.f;
   uint32_t ma=0;
   for(int i=0;i<s.len;i++){
     float x = (float)i/s.len;
-    float w = 0.5f + 0.5f*sinf( (x*6.283f*2) + (t*2.0f) + g_beat*0.5f );
+    float w = 0.5f + 0.5f*sinf( (x*6.283f*(1.5f+inten*2.f)) + (t*2.0f) + g_beat_phase*3.1415f );
     px_rgba_t a=p->color1, b=p->color2;
     px_rgba_t px = { (uint8_t)(a.r + (b.r-a.r)*w),
                      (uint8_t)(a.g + (b.g-a.g)*w),

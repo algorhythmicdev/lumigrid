@@ -12,8 +12,9 @@ idf_component_register(
         "utils/json_config.c"
         "utils/scheduler.c"
         "utils/trigger_engine.c"
+        "utils/power_budget.c"
         "utils/diagnostics.c"
-    INCLUDE_DIRS 
+    INCLUDE_DIRS
         "."
         "config"
         "tasks"
@@ -36,6 +37,7 @@ idf_component_register(
         storage_fs
         aled_rmt
         mqtt_wrapper
+        freertos
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE -Wall -Wextra)

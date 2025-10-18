@@ -1,0 +1,8 @@
+[0/1] Re-running CMake...
+-- Building ESP-IDF components for target esp32
+NOTICE: Processing 2 dependencies:
+NOTICE: [1/2] joltwallet/littlefs (1.20.1)
+NOTICE: [2/2] idf (5.3.0)
+-- Configuring incomplete, errors occurred!
+FAILED: build.ninja 
+/usr/bin/cmake --regenerate-during-build -S/home/slaff/Documents/lumigrid-1/firmware -B/home/slaff/Documents/lumigrid-1/firmware/build
