@@ -79,6 +79,7 @@
         LumiGrid
       </div>
       <div class="top-actions">
+        <span class="pill"><span id="tick-lag"></span></span>
         <span class="pill"><span class="status-dot"></span> Connected</span>
       </div>
     </header>
@@ -111,20 +112,117 @@
           </div>
           <div class="card">
             <h3>Quick Actions</h3>
-            <button class="btn small">All Off</button>
-            <button class="btn small ghost">Test Pattern</button>
+            <div class="row">
+              <button class="btn ghost small" id="btn-selftest">Self-Test</button>
+              <button class="btn danger small" id="btn-blackout">Blackout</button>
+              <button class="btn ghost small" id="btn-savecfg">Save Config</button>
+              <button class="btn ghost small" id="btn-backup">Download Config</button>
+              <label class="btn ghost small"><input type="file" id="cfg-upload" hidden>Upload Config</label>
+            </div>
           </div>
+        </div>
+        <h2>Settings</h2>
+        <div class="grid">
+            <div class="card">
+                <h3>Strip Types</h3>
+                <table id="strip-types-table">
+                    <thead>
+                        <tr>
+                            <th>Channel</th>
+                            <th>Type</th>
+                            <th>Order</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="card">
+                <h3>PWM Groups</h3>
+                <table id="pwm-groups-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Kind</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
       </main>
     </div>
   </div>
   <script>
-    console.log('LumiGrid UI loaded');
-    
-    const evtSource = new EventSource('/events');
-    evtSource.onmessage = (e) => {
-      console.log('Event:', e.data);
+    const API = {
+      trigger: (data) => fetch('/api/trigger', { method: 'POST', body: JSON.stringify(data) }),
+      configGet: () => fetch('/api/config').then(r => r.json()),
+      configPost: (data) => fetch('/api/config', { method: 'POST', body: JSON.stringify(data) }),
     };
+
+    document.getElementById('btn-selftest').onclick = ()=> API.trigger({action:'self_test'});
+    document.getElementById('btn-blackout').onclick = ()=> API.trigger({action:'blackout'});
+    document.getElementById('btn-savecfg').onclick = ()=> API.configPost({}); // server persists current mutable root
+    document.getElementById('btn-backup').onclick = async ()=>{
+      const cfg = await API.configGet(); const blob = new Blob([JSON.stringify(cfg,null,2)],{type:'application/json'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='lumigrid_config.json'; a.click();
+    };
+    document.getElementById('cfg-upload').onchange = async (e)=>{
+      const file = e.target.files[0]; const text = await file.text();
+      await API.configPost(JSON.parse(text)); alert('Config uploaded. Reboot may be required.');
+    };
+
+    const evtSource = new EventSource('/events');
+    evtSource.addEventListener('status', (e)=>{
+      const d = JSON.parse(e.data);
+      document.getElementById('tick-lag').textContent = d.limit ? `Power: ${d.power_mA} mA (clamped)` : `Power: ${d.power_mA||'—'} mA`;
+    });
+
+    function populateStripTypes(aled) {
+        const table = document.getElementById('strip-types-table').getElementsByTagName('tbody')[0];
+        table.innerHTML = '';
+        aled.forEach(a => {
+            const row = table.insertRow();
+            row.innerHTML = `
+                <td>${a.ch}</td>
+                <td><input type="text" value="${a.strip_type}"></td>
+                <td><input type="text" value="${a.order}"></td>
+                <td><button class="btn btn-small">Save</button></td>
+            `;
+            row.querySelector('button').onclick = () => {
+                const inputs = row.querySelectorAll('input');
+                API.trigger({
+                    action: 'set_strip_type',
+                    ch: a.ch,
+                    strip_type: inputs[0].value,
+                    order: inputs[1].value
+                });
+            };
+        });
+    }
+
+    function populatePwmGroups(pwmGroups) {
+        const table = document.getElementById('pwm-groups-table').getElementsByTagName('tbody')[0];
+        table.innerHTML = '';
+        pwmGroups.forEach(g => {
+            const row = table.insertRow();
+            row.innerHTML = `
+                <td>${g.name}</td>
+                <td>${g.kind}</td>
+                <td><button class="btn btn-small">Edit</button></td>
+            `;
+            row.querySelector('button').onclick = () => alert('Editing PWM groups is not yet implemented.');
+        });
+    }
+
+    async function refreshStatus() {
+        const status = await fetch('/api/status').then(r => r.json());
+        populateStripTypes(status.aled);
+        populatePwmGroups(status.pwm_groups);
+    }
+
+    refreshStatus();
   </script>
 </body>
 </html>

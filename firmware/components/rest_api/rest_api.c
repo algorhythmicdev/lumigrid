@@ -23,12 +23,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "lednode_init.h"
+#include "self_test.h"
+#include "power_budget.h"
+
 #define PRESET_DIR        "/spiffs/presets"
 #define MAX_BODY_LENGTH   4096
 #define MAX_NAME_LENGTH   48
 #define SSE_INTERVAL_MS   250
-
-#define EFFECT_CHANNELS   8
 
 static rest_api_effect_ops_t  s_effect_ops   = {0};
 static rest_api_pwm_ops_t     s_pwm_ops      = {0};
@@ -334,22 +336,22 @@ static esp_err_t get_status_handler(httpd_req_t *req){
   cJSON_AddStringToObject(root, "role", "Slave");
   cJSON_AddNumberToObject(root, "uptime_ms", esp_timer_get_time() / 1000ULL);
 
-  float power_scale[EFFECT_CHANNELS];
-  for (int i = 0; i < EFFECT_CHANNELS; ++i){
+  float power_scale[aled_count()];
+  for (int i = 0; i < aled_count(); ++i){
     power_scale[i] = 1.0f;
   }
   if (s_effect_ops.get_power_scale){
-    s_effect_ops.get_power_scale(power_scale, EFFECT_CHANNELS);
+    s_effect_ops.get_power_scale(power_scale, aled_count());
   }
   bool limit = false;
-  for (int i = 0; i < EFFECT_CHANNELS; ++i){
+  for (int i = 0; i < aled_count(); ++i){
     if (power_scale[i] < 0.99f){
       limit = true;
       break;
     }
   }
 
-  int ch_total = EFFECT_CHANNELS;
+  int ch_total = aled_count();
   if (s_effect_ops.channel_count){
     int reported = s_effect_ops.channel_count();
     if (reported > 0){
@@ -399,9 +401,31 @@ static esp_err_t get_status_handler(httpd_req_t *req){
     }
   }
 
+  cJSON *aled_out = cJSON_AddArrayToObject(root,"aled");
+  for(int i=0;i<aled_count();i++){
+    cJSON *a = cJSON_CreateObject();
+    cJSON_AddNumberToObject(a,"ch",i+1);
+    cJSON_AddStringToObject(a,"strip_type", aled_ch[i].type==LED_SK6812_RGBW?"SK6812_RGBW":"WS2812B");
+    cJSON_AddStringToObject(a,"order",      order_to_string(aled_ch[i].order));
+    cJSON_AddItemToArray(aled_out, a);
+  }
+  cJSON *pg_out = cJSON_AddArrayToObject(root,"pwm_groups");
+  for(int i=0;i<pwm_groups_count();i++){
+    const pwm_group_t* g = pwm_groups_get(i);
+    cJSON *x=cJSON_CreateObject();
+    cJSON_AddStringToObject(x,"name", g->name);
+    cJSON_AddStringToObject(x,"kind", g->kind==PWMG_RGBW?"RGBW":"RGB");
+    cJSON_AddItemToArray(pg_out,x);
+  }
+
   cJSON_AddBoolToObject(root, "power_limit_active", limit);
   cJSON_AddNumberToObject(root, "pwm_max_duty", 0.85);
-  cJSON_AddNullToObject(root, "last_error");
+  const char *err_str = get_last_error();
+  if (err_str) {
+      cJSON_AddStringToObject(root, "last_error", err_str);
+  } else {
+      cJSON_AddNullToObject(root, "last_error");
+  }
   cJSON_AddNumberToObject(root, "heap_free_kb", esp_get_free_heap_size() / 1024);
 
   return json_reply(req, root);
@@ -585,16 +609,42 @@ static esp_err_t post_trigger_handler(httpd_req_t *req){
     return ESP_FAIL;
   }
 
+#define streq(a,b) (strcmp((a),(b))==0)
+#define JSTR(o,k) cJSON_GetObjectItem(o,k)->valuestring
+#define JNUM(o,k) cJSON_GetObjectItem(o,k)->valuedouble
+#define JHAS(o,k) cJSON_HasObjectItem(o,k)
+
   const char *action = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "action"));
   esp_err_t status = ESP_OK;
 
   if (!action){
     status = ESP_ERR_INVALID_ARG;
+  } else if (streq(action,"self_test")) {
+    self_test_run();
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, NULL, 0);
+    cJSON_Delete(json);
+    return ESP_OK;
+  } else if (streq(action,"set_pwm_group")){
+    const char* name = JSTR(root,"name");
+    if (JHAS(root,"w")) pwm_group_set_rgbw(name, JNUM(root,"r"), JNUM(root,"g"), JNUM(root,"b"), JNUM(root,"w"));
+    else                pwm_group_set_rgb (name, JNUM(root,"r"), JNUM(root,"g"), JNUM(root,"b"));
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, NULL, 0);
+    cJSON_Delete(json);
+    return ESP_OK;
+  } else if (streq(action,"set_strip_type")){
+    int ch = (int)JNUM(root,"ch") - 1;
+    lednode_set_strip_type(ch, JSTR(root,"strip_type"), JSTR(root,"order"));
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, NULL, 0);
+    cJSON_Delete(json);
+    return ESP_OK;
   } else if (strcasecmp(action, "play_preset") == 0){
     const char *target = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "target"));
     const char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "name"));
     uint32_t fade_ms = (uint32_t)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(json, "fade_ms"));
-    int ch = parse_channel(target, "ALEDch", EFFECT_CHANNELS);
+    int ch = parse_channel(target, "ALEDch", aled_count());
     if (ch < 0 || !is_safe_token(name) || !s_effect_ops.set_base){
       status = ESP_ERR_INVALID_ARG;
     } else {
@@ -609,7 +659,7 @@ static esp_err_t post_trigger_handler(httpd_req_t *req){
   } else if (strcasecmp(action, "set_pwm") == 0){
     const char *target = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "target"));
     const char *mode = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "mode"));
-    int ch = parse_channel(target, "LEDch", 8);
+    int ch = parse_channel(target, "LEDch", pwm_count());
     if (ch < 0){
       status = ESP_ERR_INVALID_ARG;
     } else if (!mode || strcasecmp(mode, "static") == 0){
@@ -682,8 +732,8 @@ static esp_err_t post_trigger_handler(httpd_req_t *req){
     }
   } else if (strcasecmp(action, "blackout") == 0){
     const char *target = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "target"));
-    int aled_ch = parse_channel(target, "ALEDch", EFFECT_CHANNELS);
-    int pwm_ch  = parse_channel(target, "LEDch", 8);
+    int aled_ch = parse_channel(target, "ALEDch", aled_count());
+    int pwm_ch  = parse_channel(target, "LEDch", pwm_count());
     if (aled_ch >= 0){
       if (!s_effect_ops.set_base){
         status = ESP_ERR_INVALID_STATE;
@@ -715,7 +765,7 @@ static esp_err_t post_trigger_handler(httpd_req_t *req){
         for (int i = 0; i < EFFECT_CHANNELS; ++i){
           s_effect_ops.set_base(i, &off, 0);
         }
-        for (int i = 0; i < 8; ++i){
+          for (int i = 0; i < pwm_count(); ++i){
           s_pwm_ops.mode_static((uint8_t)i, 0.f);
         }
       }
@@ -786,23 +836,22 @@ static esp_err_t events_handler(httpd_req_t *req){
   while (1){
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000ULL);
     bool limit = false;
-    float power_scale[EFFECT_CHANNELS];
-    for (int i = 0; i < EFFECT_CHANNELS; ++i){
+    float power_scale[aled_count()];
+    for (int i = 0; i < aled_count(); ++i){
       power_scale[i] = 1.0f;
     }
     if (s_effect_ops.get_power_scale){
-      s_effect_ops.get_power_scale(power_scale, EFFECT_CHANNELS);
+      s_effect_ops.get_power_scale(power_scale, aled_count());
     }
-    for (int i = 0; i < EFFECT_CHANNELS; ++i){
+    for (int i = 0; i < aled_count(); ++i){
       if (power_scale[i] < 0.99f){
         limit = true;
         break;
       }
     }
     snprintf(line, sizeof(line),
-             "event:status\n"
-             "data:{\"playhead\":%" PRIu32 ",\"limit\":%d}\n\n",
-             now_ms, limit ? 1 : 0);
+             "event: status\ndata:{\"power_mA\":%u,\"limit\":%d}\n\n",
+             (unsigned)g_power_estimate_mA, (int)g_power_clamped);
     esp_err_t err = httpd_resp_send_chunk(req, line, strlen(line));
     if (err != ESP_OK){
       break;

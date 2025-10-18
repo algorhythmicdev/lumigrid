@@ -12,16 +12,22 @@ static const char *TAG = "MAIN";
 void app_main(void) {
     ESP_LOGI(TAG, "LumiGrid LED Node v%s", LUMIGRID_VERSION_STRING);
     ESP_LOGI(TAG, "Build: %s %s", LUMIGRID_BUILD_DATE, LUMIGRID_BUILD_TIME);
-    
+
+    // Initialize NVS
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    
+
     ESP_LOGI(TAG, "Initializing LED Node...");
-    lednode_init();
-    
-    ESP_LOGI(TAG, "LED Node running");
+    app_init();
+
+    const char* last_error = get_last_error();
+    if (last_error) {
+        ESP_LOGE(TAG, "LED Node initialization failed: %s", last_error);
+    } else {
+        ESP_LOGI(TAG, "LED Node running");
+    }
 }
