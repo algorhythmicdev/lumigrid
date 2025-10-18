@@ -30,14 +30,68 @@
 
 #define EFFECT_CHANNELS   8
 
-#define EFFECT_CHANNELS   8
-
 static rest_api_effect_ops_t  s_effect_ops   = {0};
 static rest_api_pwm_ops_t     s_pwm_ops      = {0};
 static rest_api_trigger_ops_t s_trigger_ops  = {0};
 
 static const char *TAG = "REST_API";
 static httpd_handle_t s_server = NULL;
+
+static const char* strip_type_to_string(led_type_t type){
+  switch (type){
+    case LED_SK6812_RGBW: return "SK6812_RGBW";
+    case LED_WS2812B:
+    default: return "WS2812B";
+  }
+}
+
+static const char* order_to_string(color_order_t order){
+  switch (order){
+    case ORDER_RGB:   return "RGB";
+    case ORDER_GRB:   return "GRB";
+    case ORDER_RGBW:  return "RGBW";
+    case ORDER_GRBW:  return "GRBW";
+    default:          return "GRB";
+  }
+}
+
+static bool string_to_strip_type(const char *str, led_type_t *out){
+  if (!str || !out){
+    return false;
+  }
+  if (strcasecmp(str, "SK6812_RGBW") == 0){
+    *out = LED_SK6812_RGBW;
+    return true;
+  }
+  if (strcasecmp(str, "WS2812B") == 0){
+    *out = LED_WS2812B;
+    return true;
+  }
+  return false;
+}
+
+static bool string_to_order(const char *str, color_order_t *out){
+  if (!str || !out){
+    return false;
+  }
+  if (strcasecmp(str, "RGB") == 0){
+    *out = ORDER_RGB;
+    return true;
+  }
+  if (strcasecmp(str, "GRB") == 0){
+    *out = ORDER_GRB;
+    return true;
+  }
+  if (strcasecmp(str, "RGBW") == 0){
+    *out = ORDER_RGBW;
+    return true;
+  }
+  if (strcasecmp(str, "GRBW") == 0){
+    *out = ORDER_GRBW;
+    return true;
+  }
+  return false;
+}
 
 static esp_err_t json_reply(httpd_req_t *req, cJSON *root);
 
@@ -295,11 +349,54 @@ static esp_err_t get_status_handler(httpd_req_t *req){
     }
   }
 
+  int ch_total = EFFECT_CHANNELS;
+  if (s_effect_ops.channel_count){
+    int reported = s_effect_ops.channel_count();
+    if (reported > 0){
+      ch_total = reported;
+    }
+  }
+  cJSON *aled = cJSON_AddArrayToObject(root, "aled");
+  for (int i = 0; i < ch_total; ++i){
+    led_type_t type;
+    color_order_t order;
+    uint16_t pixels = 0;
+    bool have_info = false;
+    if (s_effect_ops.get_channel_info){
+      have_info = s_effect_ops.get_channel_info(i, &type, &order, &pixels);
+    }
+    if (have_info){
+      cJSON *a = cJSON_CreateObject();
+      cJSON_AddNumberToObject(a, "ch", i + 1);
+      cJSON_AddNumberToObject(a, "pixels", pixels);
+      cJSON_AddStringToObject(a, "strip_type", strip_type_to_string(type));
+      cJSON_AddStringToObject(a, "order", order_to_string(order));
+      if (i < EFFECT_CHANNELS){
+        cJSON_AddNumberToObject(a, "power_scale", power_scale[i]);
+      }
+      cJSON_AddItemToArray(aled, a);
+    }
+  }
+
   cJSON *fps = cJSON_AddObjectToObject(root, "fps");
-  for (int i = 0; i < EFFECT_CHANNELS; ++i){
-    char key[16];
+  for (int i = 0; i < ch_total; ++i){
+    char key[24];
     snprintf(key, sizeof(key), "aled_ch%d", i + 1);
     cJSON_AddNumberToObject(fps, key, 60);
+  }
+
+  cJSON *pg = cJSON_AddArrayToObject(root, "pwm_groups");
+  if (s_pwm_ops.groups_count && s_pwm_ops.get_group){
+    int total = s_pwm_ops.groups_count();
+    for (int i = 0; i < total; ++i){
+      pwm_group_t info;
+      if (s_pwm_ops.get_group(i, &info)){
+        cJSON *g = cJSON_CreateObject();
+        cJSON_AddStringToObject(g, "name", info.name);
+        cJSON_AddStringToObject(g, "kind", info.kind == PWMG_RGBW ? "RGBW" : "RGB");
+        cJSON_AddItemToArray(pg, g);
+      }
+    }
   }
 
   cJSON_AddBoolToObject(root, "power_limit_active", limit);
@@ -336,6 +433,105 @@ static esp_err_t get_presets_handler(httpd_req_t *req){
   }
   closedir(dir);
   return json_reply(req, arr);
+}
+
+static esp_err_t get_config_handler(httpd_req_t *req){
+  cJSON *root = cJSON_CreateObject();
+  cJSON_AddStringToObject(root, "node_type", "led-node");
+
+  cJSON *aled = cJSON_AddArrayToObject(root, "aled");
+  if (s_effect_ops.channel_count && s_effect_ops.get_channel_info){
+    int total = s_effect_ops.channel_count();
+    for (int i = 0; i < total; ++i){
+      led_type_t type;
+      color_order_t order;
+      uint16_t pixels = 0;
+      if (s_effect_ops.get_channel_info(i, &type, &order, &pixels)){
+        cJSON *a = cJSON_CreateObject();
+        cJSON_AddNumberToObject(a, "ch", i + 1);
+        cJSON_AddNumberToObject(a, "pixels", pixels);
+        cJSON_AddStringToObject(a, "strip_type", strip_type_to_string(type));
+        cJSON_AddStringToObject(a, "order", order_to_string(order));
+        cJSON_AddItemToArray(aled, a);
+      }
+    }
+  }
+
+  cJSON *pg = cJSON_AddArrayToObject(root, "pwm_groups");
+  if (s_pwm_ops.groups_count && s_pwm_ops.get_group){
+    int total = s_pwm_ops.groups_count();
+    for (int i = 0; i < total; ++i){
+      pwm_group_t info;
+      if (s_pwm_ops.get_group(i, &info)){
+        cJSON *g = cJSON_CreateObject();
+        cJSON_AddStringToObject(g, "name", info.name);
+        cJSON_AddStringToObject(g, "kind", info.kind == PWMG_RGBW ? "RGBW" : "RGB");
+        cJSON *map = cJSON_AddObjectToObject(g, "map");
+        cJSON_AddNumberToObject(map, "R", info.map_r + 1);
+        cJSON_AddNumberToObject(map, "G", info.map_g + 1);
+        cJSON_AddNumberToObject(map, "B", info.map_b + 1);
+        if (info.kind == PWMG_RGBW){
+          cJSON_AddNumberToObject(map, "W", info.map_w + 1);
+        }
+        cJSON_AddItemToArray(pg, g);
+      }
+    }
+  }
+
+  return json_reply(req, root);
+}
+
+static esp_err_t post_config_handler(httpd_req_t *req){
+  char *buf = malloc(MAX_BODY_LENGTH);
+  if (!buf){
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+  size_t len = 0;
+  if (!read_body(req, buf, MAX_BODY_LENGTH, &len)){
+    free(buf);
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Body too large");
+    return ESP_FAIL;
+  }
+
+  cJSON *json = cJSON_ParseWithLength(buf, len);
+  free(buf);
+  if (!json){
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+    return ESP_FAIL;
+  }
+
+  cJSON *pg = cJSON_GetObjectItemCaseSensitive(json, "pwm_groups");
+  if (pg && cJSON_IsArray(pg) && s_pwm_ops.replace_groups){
+    pwm_group_t tmp[8];
+    int count = 0;
+    cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, pg){
+      if (!cJSON_IsObject(entry) || count >= 8){
+        continue;
+      }
+      const char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(entry, "name"));
+      const char *kind_str = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(entry, "kind"));
+      cJSON *map = cJSON_GetObjectItemCaseSensitive(entry, "map");
+      if (!name || !kind_str || !cJSON_IsObject(map)){
+        continue;
+      }
+      pwm_group_t group = {0};
+      strncpy(group.name, name, sizeof(group.name) - 1);
+      group.kind = (strcasecmp(kind_str, "RGBW") == 0) ? PWMG_RGBW : PWMG_RGB;
+      group.map_r = (int)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(map, "R")) - 1;
+      group.map_g = (int)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(map, "G")) - 1;
+      group.map_b = (int)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(map, "B")) - 1;
+      group.map_w = (int)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(map, "W")) - 1;
+      tmp[count++] = group;
+    }
+    s_pwm_ops.replace_groups(tmp, count);
+  }
+
+  cJSON_Delete(json);
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+  httpd_resp_sendstr(req, "{\"status\":\"saved\"}");
+  return ESP_OK;
 }
 
 static esp_err_t post_presets_handler(httpd_req_t *req){
@@ -450,6 +646,39 @@ static esp_err_t post_trigger_handler(httpd_req_t *req){
       }
     } else {
       status = ESP_ERR_INVALID_ARG;
+    }
+  } else if (strcasecmp(action, "set_pwm_group") == 0){
+    const char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "name"));
+    if (!name){
+      status = ESP_ERR_INVALID_ARG;
+    } else if (!s_pwm_ops.group_set_rgb || !s_pwm_ops.group_set_rgbw){
+      status = ESP_ERR_INVALID_STATE;
+    } else {
+      float r = (float)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(json, "r"));
+      float g = (float)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(json, "g"));
+      float b = (float)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(json, "b"));
+      cJSON *w_val = cJSON_GetObjectItemCaseSensitive(json, "w");
+      if (w_val && cJSON_IsNumber(w_val)){
+        float w = (float)w_val->valuedouble;
+        s_pwm_ops.group_set_rgbw(name, r, g, b, w);
+      } else {
+        s_pwm_ops.group_set_rgb(name, r, g, b);
+      }
+    }
+  } else if (strcasecmp(action, "set_strip_type") == 0){
+    if (!s_effect_ops.set_channel_type){
+      status = ESP_ERR_INVALID_STATE;
+    } else {
+      int ch = (int)cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(json, "ch")) - 1;
+      const char *type_str = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "strip_type"));
+      const char *order_str = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "order"));
+      led_type_t type;
+      color_order_t order;
+      if (ch < 0 || !string_to_strip_type(type_str, &type) || !string_to_order(order_str, &order)){
+        status = ESP_ERR_INVALID_ARG;
+      } else if (!s_effect_ops.set_channel_type(ch, type, order)){
+        status = ESP_FAIL;
+      }
     }
   } else if (strcasecmp(action, "blackout") == 0){
     const char *target = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "target"));
@@ -616,6 +845,20 @@ esp_err_t rest_api_start(void){
     .handler = post_trigger_handler,
   };
   httpd_register_uri_handler(s_server, &post_trigger);
+
+  httpd_uri_t get_config = {
+    .uri = "/api/config",
+    .method = HTTP_GET,
+    .handler = get_config_handler,
+  };
+  httpd_register_uri_handler(s_server, &get_config);
+
+  httpd_uri_t post_config = {
+    .uri = "/api/config",
+    .method = HTTP_POST,
+    .handler = post_config_handler,
+  };
+  httpd_register_uri_handler(s_server, &post_config);
 
   httpd_uri_t post_cue = {
     .uri = "/api/cue",

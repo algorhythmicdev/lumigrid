@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "lumigrid_lednode",
-    "project_version":    "6f96564-dirty",
+    "project_version":    "dc12560-dirty",
     "project_path":       "/home/slaff/Documents/lumigrid-1/firmware",
     "idf_path":           "/home/slaff/esp/esp-idf",
     "build_dir":          "/home/slaff/Documents/lumigrid-1/firmware/build",

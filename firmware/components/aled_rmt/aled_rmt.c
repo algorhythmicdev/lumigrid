@@ -68,25 +68,40 @@ esp_err_t aled_rmt_init_chan(int idx, gpio_num_t pin){
   return ESP_OK;
 }
 
-static inline uint8_t component_from_pixel(const px_rgba_t* fb, int pixel_idx, int component_idx, int stride){
-  const px_rgba_t* px = &fb[pixel_idx];
-  if (stride == 4){
-    switch (component_idx){
-      case 0: return px->g;
-      case 1: return px->r;
-      case 2: return px->b;
-      default: return px->w;
-    }
-  } else {
-    switch (component_idx){
-      case 0: return px->g;
-      case 1: return px->r;
-      default: return px->b;
-    }
+static inline uint8_t pixel_component(const px_rgba_t* px, int component_idx, color_order_t order, bool rgbw){
+  switch(order){
+    case ORDER_RGB:
+      if (component_idx == 0) return px->r;
+      if (component_idx == 1) return px->g;
+      if (component_idx == 2) return px->b;
+      break;
+    case ORDER_GRB:
+      if (component_idx == 0) return px->g;
+      if (component_idx == 1) return px->r;
+      if (component_idx == 2) return px->b;
+      break;
+    case ORDER_RGBW:
+      if (component_idx == 0) return px->r;
+      if (component_idx == 1) return px->g;
+      if (component_idx == 2) return px->b;
+      if (component_idx == 3) return px->w;
+      break;
+    case ORDER_GRBW:
+      if (component_idx == 0) return px->g;
+      if (component_idx == 1) return px->r;
+      if (component_idx == 2) return px->b;
+      if (component_idx == 3) return px->w;
+      break;
+    default:
+      break;
   }
+  if (rgbw && component_idx == 3){
+    return px->w;
+  }
+  return 0;
 }
 
-esp_err_t aled_rmt_write(int idx, const px_rgba_t* fb, int npx, led_type_t type){
+esp_err_t aled_rmt_write(int idx, const px_rgba_t* fb, int npx, led_type_t type, color_order_t order){
   if (idx < 0 || idx >= ALED_RMT_MAX_CHANNELS || !s_channels[idx] || !fb || npx <= 0){
     return ESP_ERR_INVALID_ARG;
   }
@@ -116,7 +131,7 @@ esp_err_t aled_rmt_write(int idx, const px_rgba_t* fb, int npx, led_type_t type)
 
       uint8_t value = 0;
       if (pixel < npx){
-        value = component_from_pixel(fb, pixel, component, stride);
+        value = pixel_component(&fb[pixel], component, order, stride == 4);
       }
 
       if (value & (1 << bit_pos)){

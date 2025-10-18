@@ -118,6 +118,7 @@ static void init_channel(channel_ctx_t *ctx, int idx){
 
   ctx->led.ch = idx;
   ctx->led.type = LED_WS2812B;
+  ctx->led.order = ORDER_GRB;
   ctx->led.n_pixels = DEFAULT_PIXELS;
   ctx->led.gamma = 2.2f;
   ctx->led.max_brightness = 255;
@@ -232,6 +233,47 @@ void effect_engine_get_stats(effect_engine_stats_t *out){
   }
 }
 
+int effect_engine_channel_count(void){
+  return CH_MAX;
+}
+
+bool effect_engine_get_channel_info(int ch, led_type_t *type, color_order_t *order, uint16_t *n_pixels){
+  if (ch < 0 || ch >= CH_MAX){
+    return false;
+  }
+  ensure_lock();
+  bool ok = false;
+  if (xSemaphoreTake(s_state_lock, pdMS_TO_TICKS(20)) == pdTRUE){
+    if (type){
+      *type = s_channels[ch].led.type;
+    }
+    if (order){
+      *order = s_channels[ch].led.order;
+    }
+    if (n_pixels){
+      *n_pixels = s_channels[ch].led.n_pixels;
+    }
+    xSemaphoreGive(s_state_lock);
+    ok = true;
+  }
+  return ok;
+}
+
+bool effect_engine_set_channel_type(int ch, led_type_t type, color_order_t order){
+  if (ch < 0 || ch >= CH_MAX){
+    return false;
+  }
+  ensure_lock();
+  bool ok = false;
+  if (xSemaphoreTake(s_state_lock, pdMS_TO_TICKS(50)) == pdTRUE){
+    s_channels[ch].led.type = type;
+    s_channels[ch].led.order = order;
+    xSemaphoreGive(s_state_lock);
+    ok = true;
+  }
+  return ok;
+}
+
 static void render_channel(channel_ctx_t *ctx, uint32_t now_ms){
   channel_snapshot_t snap;
 
@@ -300,7 +342,7 @@ static void render_channel(channel_ctx_t *ctx, uint32_t now_ms){
   apply_power_scale(ctx, scale);
 
   if (ctx->rmt_ready){
-    aled_rmt_write(ctx->led.ch, ctx->led.framebuf, ctx->led.n_pixels, ctx->led.type);
+    aled_rmt_write(ctx->led.ch, ctx->led.framebuf, ctx->led.n_pixels, ctx->led.type, ctx->led.order);
   }
 
   ctx->next_deadline_ms = now_ms + ctx->frame_interval_ms;

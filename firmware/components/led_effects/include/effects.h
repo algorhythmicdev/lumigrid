@@ -4,7 +4,17 @@
 
 typedef struct { uint8_t r,g,b,w; } px_rgba_t;
 
-typedef enum { LED_WS2812B, LED_SK6812_RGBW } led_type_t;
+typedef enum {
+  LED_WS2812B = 0,
+  LED_SK6812_RGBW = 1
+} led_type_t;
+
+typedef enum {
+  ORDER_RGB = 0,
+  ORDER_GRB = 1,
+  ORDER_RGBW = 2,
+  ORDER_GRBW = 3
+} color_order_t;
 
 typedef enum {
   BLEND_NORMAL,
@@ -17,6 +27,7 @@ typedef enum {
 typedef struct {
   int ch;                 // 0..7
   led_type_t type;
+  color_order_t order;
   uint16_t n_pixels;
   float gamma;
   uint8_t max_brightness; // 0..255

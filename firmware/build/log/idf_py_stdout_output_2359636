@@ -1,0 +1,23 @@
+[1/12] Performing build step for 'bootloader'
+[1/1] cd /home/slaff/Documents/lumigrid-1/firmware/build/bootloader/esp-idf/esptool_py && /home/slaff/.espressif/python_env/idf5.3_py3.13_env/bin/python /home/slaff/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x1000 /home/slaff/Documents/lumigrid-1/firmware/build/bootloader/bootloader.bin
+Bootloader binary size 0x62f0 bytes. 0xd10 bytes (12%) free.
+[2/12] No install step for 'bootloader'
+[3/12] Completed 'bootloader'
+[4/12] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/lednode_init.c.obj
+[5/12] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/tasks/task_pwm_driver.c.obj
+[6/12] Building C object esp-idf/rest_api/CMakeFiles/__idf_rest_api.dir/rest_api.c.obj
+[7/12] Linking C static library esp-idf/rest_api/librest_api.a
+[8/12] Linking C static library esp-idf/main/libmain.a
+[9/12] Generating ld/sections.ld
+info: INFO: Symbol IDF_TARGET_LINUX defined in multiple locations (see below). Please check if this is a correct behavior or a random name match:
+    /home/slaff/esp/esp-idf/Kconfig:78
+    /home/slaff/esp/esp-idf/Kconfig:162
+[10/12] Linking CXX executable lumigrid_lednode.elf
+[11/12] Generating binary image from built executable
+esptool.py v4.10.0
+Creating esp32 image...
+Merged 2 ELF sections
+Successfully created esp32 image.
+Generated /home/slaff/Documents/lumigrid-1/firmware/build/lumigrid_lednode.bin
+[12/12] cd /home/slaff/Documents/lumigrid-1/firmware/build/esp-idf/esptool_py && /home/slaff/.espressif/python_env/idf5.3_py3.13_env/bin/python /home/slaff/esp/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /home/slaff/Documents/lumigrid-1/firmware/build/partition_table/partition-table.bin /home/slaff/Documents/lumigrid-1/firmware/build/lumigrid_lednode.bin
+lumigrid_lednode.bin binary size 0xc7b50 bytes. Smallest app partition is 0x100000 bytes. 0x384b0 bytes (22%) free.

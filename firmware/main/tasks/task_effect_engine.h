@@ -16,3 +16,6 @@ bool effect_engine_set_base(int ch, const effect_params_t *params, uint32_t fade
 bool effect_engine_set_overlay(int ch, const effect_params_t *params);
 void effect_engine_clear_overlay(int ch);
 void effect_engine_get_stats(effect_engine_stats_t *out);
+int  effect_engine_channel_count(void);
+bool effect_engine_get_channel_info(int ch, led_type_t *type, color_order_t *order, uint16_t *n_pixels);
+bool effect_engine_set_channel_type(int ch, led_type_t type, color_order_t order);

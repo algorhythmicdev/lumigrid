@@ -46,14 +46,22 @@ static const rest_api_effect_ops_t REST_EFFECT_OPS = {
     .set_base = rest_bridge_set_base,
     .set_overlay = rest_bridge_set_overlay,
     .clear_overlay = rest_bridge_clear_overlay,
-    .get_power_scale = rest_bridge_get_power_scale
+    .get_power_scale = rest_bridge_get_power_scale,
+    .channel_count = effect_engine_channel_count,
+    .get_channel_info = effect_engine_get_channel_info,
+    .set_channel_type = effect_engine_set_channel_type
 };
 
 static const rest_api_pwm_ops_t REST_PWM_OPS = {
     .mode_static = pwm_set_mode_static,
     .mode_breath = pwm_set_mode_breath,
     .mode_candle = pwm_set_mode_candle,
-    .mode_warmdim = pwm_set_mode_warmdim
+    .mode_warmdim = pwm_set_mode_warmdim,
+    .groups_count = pwm_groups_count,
+    .get_group = pwm_groups_get,
+    .replace_groups = pwm_groups_replace,
+    .group_set_rgb = pwm_group_set_rgb,
+    .group_set_rgbw = pwm_group_set_rgbw
 };
 
 static void rest_bridge_set_beat(float phase){

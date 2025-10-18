@@ -5,6 +5,7 @@
 #include "esp_timer.h"
 #include "pca9685_driver.h"
 #include <math.h>
+#include <string.h>
 
 static const char *TAG = "PWM_DRIVER";
 
@@ -32,6 +33,16 @@ typedef struct {
 } pwm_anim_t;
 
 static pwm_anim_t s_anims[8] = {0};
+static pwm_group_t s_groups[8];
+static int s_groups_len = 0;
+
+static inline void set_channel(int ch, float value){
+    if (ch >= 0 && ch < 8){
+        if (value < 0.f) value = 0.f;
+        if (value > 1.f) value = 1.f;
+        pca9685_set_duty((uint8_t)ch, value);
+    }
+}
 
 void pwm_set_mode_static(uint8_t ch, float duty) {
     if (ch >= 8) return;
@@ -64,6 +75,79 @@ void pwm_set_mode_warmdim(uint8_t ch, float duty) {
     if (clamped < 0.f) clamped = 0.f;
     if (clamped > 1.f) clamped = 1.f;
     pca9685_set_duty(ch, powf(clamped, 2.0f));
+}
+
+void pwm_groups_init_from_config(void){
+    s_groups_len = 0;
+}
+
+void pwm_groups_replace(const pwm_group_t *groups, int count){
+    if (!groups || count <= 0){
+        s_groups_len = 0;
+        return;
+    }
+    if (count > 8){
+        count = 8;
+    }
+    for (int i = 0; i < count; ++i){
+        s_groups[i] = groups[i];
+        if (s_groups[i].map_r < 0 || s_groups[i].map_r >= 8) s_groups[i].map_r = -1;
+        if (s_groups[i].map_g < 0 || s_groups[i].map_g >= 8) s_groups[i].map_g = -1;
+        if (s_groups[i].map_b < 0 || s_groups[i].map_b >= 8) s_groups[i].map_b = -1;
+        if (s_groups[i].map_w < 0 || s_groups[i].map_w >= 8) s_groups[i].map_w = -1;
+    }
+    s_groups_len = count;
+}
+
+int pwm_groups_count(void){
+    return s_groups_len;
+}
+
+bool pwm_groups_get(int index, pwm_group_t *out){
+    if (index < 0 || index >= s_groups_len || !out){
+        return false;
+    }
+    *out = s_groups[index];
+    return true;
+}
+
+static pwm_group_t* find_group(const char *name){
+    if (!name){
+        return NULL;
+    }
+    for (int i = 0; i < s_groups_len; ++i){
+        if (strcmp(s_groups[i].name, name) == 0){
+            return &s_groups[i];
+        }
+    }
+    return NULL;
+}
+
+void pwm_group_set_rgb(const char* name, float r, float g, float b){
+    pwm_group_t *gptr = find_group(name);
+    if (!gptr || gptr->kind != PWMG_RGB){
+        return;
+    }
+    set_channel(gptr->map_r, r);
+    set_channel(gptr->map_g, g);
+    set_channel(gptr->map_b, b);
+}
+
+void pwm_group_set_rgbw(const char* name, float r, float g, float b, float w){
+    pwm_group_t *gptr = find_group(name);
+    if (!gptr){
+        return;
+    }
+    if (gptr->kind == PWMG_RGB){
+        set_channel(gptr->map_r, r);
+        set_channel(gptr->map_g, g);
+        set_channel(gptr->map_b, b);
+    } else {
+        set_channel(gptr->map_r, r);
+        set_channel(gptr->map_g, g);
+        set_channel(gptr->map_b, b);
+        set_channel(gptr->map_w, w);
+    }
 }
 
 static void pwm_update_channel(pwm_anim_t* anim, uint32_t t_ms) {
@@ -127,6 +211,7 @@ static void pwm_driver_task(void *arg) {
 }
 
 void task_pwm_driver_start(void) {
+    pwm_groups_init_from_config();
     xTaskCreate(pwm_driver_task, "pwm_drv", 4096, NULL, 6, NULL);
     ESP_LOGI(TAG, "PWM driver task spawned");
 }
