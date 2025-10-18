@@ -68,37 +68,15 @@ esp_err_t aled_rmt_init_chan(int idx, gpio_num_t pin){
   return ESP_OK;
 }
 
-static inline uint8_t pixel_component(const px_rgba_t* px, int component_idx, color_order_t order, bool rgbw){
-  switch(order){
-    case ORDER_RGB:
-      if (component_idx == 0) return px->r;
-      if (component_idx == 1) return px->g;
-      if (component_idx == 2) return px->b;
-      break;
-    case ORDER_GRB:
-      if (component_idx == 0) return px->g;
-      if (component_idx == 1) return px->r;
-      if (component_idx == 2) return px->b;
-      break;
-    case ORDER_RGBW:
-      if (component_idx == 0) return px->r;
-      if (component_idx == 1) return px->g;
-      if (component_idx == 2) return px->b;
-      if (component_idx == 3) return px->w;
-      break;
-    case ORDER_GRBW:
-      if (component_idx == 0) return px->g;
-      if (component_idx == 1) return px->r;
-      if (component_idx == 2) return px->b;
-      if (component_idx == 3) return px->w;
-      break;
-    default:
-      break;
+static inline int stride_for(led_type_t t){ return t==LED_SK6812_RGBW ? 4 : 3; }
+static inline void pack(uint8_t* out, px_rgba_t p, color_order_t ord, bool rgbw){
+  if(rgbw){
+    if(ord==ORDER_RGBW){ out[0]=p.r; out[1]=p.g; out[2]=p.b; out[3]=p.w; }
+    else /*GRBW*/       { out[0]=p.g; out[1]=p.r; out[2]=p.b; out[3]=p.w; }
+  }else{
+    if(ord==ORDER_RGB){ out[0]=p.r; out[1]=p.g; out[2]=p.b; }
+    else              { out[0]=p.g; out[1]=p.r; out[2]=p.b; } // GRB default
   }
-  if (rgbw && component_idx == 3){
-    return px->w;
-  }
-  return 0;
 }
 
 esp_err_t aled_rmt_write(int idx, const px_rgba_t* fb, int npx, led_type_t type, color_order_t order){
@@ -107,50 +85,45 @@ esp_err_t aled_rmt_write(int idx, const px_rgba_t* fb, int npx, led_type_t type,
   }
 
   const ws_timing_t T = ws2812_t();
-  const int stride = (type == LED_SK6812_RGBW) ? 4 : 3;
-  const int total_bits = npx * stride * 8;
+  const bool rgbw = (type==LED_SK6812_RGBW);
+  const int stride=stride_for(type);
+  const int total_bytes = npx * stride;
+  uint8_t byte_stream[total_bytes];
+
+  for (int i = 0; i < npx; ++i){
+    pack(&byte_stream[i * stride], fb[i], order, rgbw);
+  }
 
   static rmt_symbol_word_t symbols[SYMBOL_CHUNK];
   rmt_transmit_config_t tc = {
     .loop_count = 0
   };
 
-  int bit_index = 0;
-  while (bit_index < total_bits){
-    int take = total_bits - bit_index;
-    if (take > SYMBOL_CHUNK){
-      take = SYMBOL_CHUNK;
+  int byte_index = 0;
+  while (byte_index < total_bytes){
+    int take_bytes = (total_bytes - byte_index);
+    if (take_bytes * 8 > SYMBOL_CHUNK){
+      take_bytes = SYMBOL_CHUNK / 8;
     }
 
-    for (int k = 0; k < take; ++k){
-      int global_bit = bit_index + k;
-      int pixel = global_bit / (stride * 8);
-      int within_pixel = global_bit % (stride * 8);
-      int component = within_pixel / 8;
-      int bit_pos = 7 - (within_pixel % 8);
-
-      uint8_t value = 0;
-      if (pixel < npx){
-        value = pixel_component(&fb[pixel], component, order, stride == 4);
-      }
-
-      if (value & (1 << bit_pos)){
+    for (int k = 0; k < take_bytes * 8; ++k){
+      int current_byte_idx = byte_index + k / 8;
+      int bit_pos = 7 - (k % 8);
+      if (byte_stream[current_byte_idx] & (1 << bit_pos)){
         symbols[k] = sym(T.t1h, T.t1l);
       } else {
         symbols[k] = sym(T.t0h, T.t0l);
       }
     }
 
-    esp_err_t err = rmt_transmit(s_channels[idx], NULL, symbols, take * sizeof(rmt_symbol_word_t), &tc);
+    esp_err_t err = rmt_transmit(s_channels[idx], NULL, symbols, take_bytes * 8 * sizeof(rmt_symbol_word_t), &tc);
     if (err != ESP_OK){
       ESP_LOGE(TAG, "rmt_transmit failed ch%d: %s", idx, esp_err_to_name(err));
       return err;
     }
-
-    bit_index += take;
+    byte_index += take_bytes;
   }
 
-  // Reset pulse (60 us); 1 ms delay is safe.
   vTaskDelay(pdMS_TO_TICKS(1));
   return ESP_OK;
 }
